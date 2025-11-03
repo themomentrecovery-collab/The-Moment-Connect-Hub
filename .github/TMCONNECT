@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moment Connect – Developer Walkthrough</title>
+<style>
+  body {font-family: Inter, Arial, sans-serif; background:#f9fafb; color:#111; margin:0;}
+  h1 {background:#0057FF; color:#fff; padding:1rem 2rem;}
+  h2 {color:#0057FF; margin-top:1.5rem;}
+  details {background:#fff; margin:1rem; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,.05);}
+  summary {cursor:pointer; padding:1rem; font-weight:600;}
+  details[open] summary {border-bottom:1px solid #e5e7eb;}
+  pre {background:#0a0a0a; color:#00ff9d; padding:1rem; overflow-x:auto; border-radius:6px;}
+  code {color:#00ff9d;}
+  a {color:#0057FF; text-decoration:none;}
+  footer {text-align:center; padding:2rem; font-size:.9rem; color:#555;}
+</style>
+</head>
+<body>
+
+<h1>Moment Connect – Full Developer Walkthrough</h1>
+<p style="padding:0 2rem;">
+<b>The Moment,Inc</b> • <a href="https://www.themomentinc.org">www.themomentinc.org</a> • 
+<a href="mailto:support@themomentinc.org">support@themomentinc.org</a> • (949) 354-3577  
+<br>2108 N Street #6101 • Sacramento CA 95816
+</p>
+
+<details open>
+  <summary>0  Clone & Open in VS Code</summary>
+  <pre><code>git clone https://github.com/themomentinc/moment-connect.git
+cd moment-connect</code></pre>
+  <p>Requires Node ≥ 18 and PostgreSQL ≥ 14.</p>
+</details>
+
+<details>
+  <summary>1  Create Environment File (.env)</summary>
+  <pre><code>DATABASE_URL=postgres://postgres:password@localhost:5432/momentconnect
+JWT_SECRET=CHANGE_ME_CHANGE_ME
+AWS_REGION=us-west-1
+S3_BUCKET=momentconnect-uploads</code></pre>
+  <p>⚠️ Never commit this file to Git.</p>
+</details>
+
+<details>
+  <summary>2  Set Up Database</summary>
+  <pre><code>CREATE DATABASE momentconnect;
+\c momentconnect
+\i backend/db.sql</code></pre>
+  <p>Confirms creation of <code>users, referrals, audit_log, consent_events, reporting_events, facility_beds, facility_profile</code>.</p>
+</details>
+
+<details>
+  <summary>3  Install Backend Dependencies</summary>
+  <pre><code>cd backend
+npm install</code></pre>
+</details>
+
+<details>
+  <summary>4  Run Server (Express + Postgres)</summary>
+  <pre><code>npm start
+# or
+nodemon server.js</code></pre>
+  <p>Visit <a href="http://localhost:3001" target="_blank">http://localhost:3001</a></p>
+  <p>Test endpoints in Postman:</p>
+  <ul>
+    <li>POST /register</li>
+    <li>POST /login</li>
+    <li>POST /referrals</li>
+    <li>POST /referrals/:id/assign</li>
+    <li>POST /referrals/:id/respond</li>
+  </ul>
+</details>
+
+<details>
+  <summary>5  Launch Frontend Dashboards</summary>
+  <pre><code>cd frontend
+npm install
+npm run dev</code></pre>
+  <p>Default → <a href="http://localhost:5173" target="_blank">http://localhost:5173</a></p>
+</details>
+
+<details>
+  <summary>6  Consent Verification Flow</summary>
+  <ol>
+    <li>Hub clicks <b>Verify Consent</b>.</li>
+    <li>POST /consent_events with new_status = VERIFIED.</li>
+    <li>Audit log records “VERIFY_CONSENT”.</li>
+  </ol>
+</details>
+
+<details>
+  <summary>7  Assign Referral to Facility</summary>
+  <pre><code>POST /referrals/:id/assign
+{ "facility_id": 5 }</code></pre>
+  <p>Referral → status = <code>assigned</code>; facility dashboard shows new referral.</p>
+</details>
+
+<details>
+  <summary>8  Facility Response & Intake</summary>
+  <pre><code>POST /referrals/:id/respond
+{ "status": "accepted" }</code></pre>
+  <p>Then facility confirms intake → status = ACTIVE → bed count decrements.</p>
+</details>
+
+<details>
+  <summary>9  Upload Documents / Reports</summary>
+  <pre><code>POST /uploads
+{ "referral_id":42,"doc_type":"discharge","s3_key":"uploads/42/discharge.pdf" }</code></pre>
+</details>
+
+<details>
+  <summary>10  Admin Monitoring & Reports</summary>
+  <p>Hub dashboard aggregates <code>reporting_events</code> and <code>audit_log</code> for compliance metrics.</p>
+</details>
+
+<details>
+  <summary>11  Deployment Checklist (Prod)</summary>
+  <ul>
+    <li>RDS encryption ✅</li>
+    <li>S3 private ACL ✅</li>
+    <li>Secrets Manager ✅</li>
+    <li>CloudWatch logging ✅</li>
+    <li>MFA enforced ✅</li>
+    <li>TLS 1.3 ✅</li>
+  </ul>
+</details>
+
+<details>
+  <summary>12  Audit & Retention</summary>
+  <pre><code>SELECT * FROM audit_log ORDER BY created_at DESC;</code></pre>
+  <p>Retain PHI ≥ 6 years (HIPAA 45 CFR 164.530(j)(2)).</p>
+</details>
+
+<details>
+  <summary>13  Troubleshooting</summary>
+  <table border="1" cellpadding="6" style="border-collapse:collapse;font-size:.9rem;">
+    <tr><th>Issue</th><th>Fix</th></tr>
+    <tr><td>JWT Invalid</td><td>Re-login with fresh MFA token</td></tr>
+    <tr><td>Consent button disabled</td><td>Ensure latest consent_events.new_status = 'VERIFIED'</td></tr>
+    <tr><td>Facility sees no referrals</td><td>Check referral.status = 'assigned' and facility_id match</td></tr>
+    <tr><td>CORS error</td><td>Add frontend origin to cors() whitelist in server.js</td></tr>
+  </table>
+</details>
+
+<details>
+  <summary>14  Next Sprint Ideas</summary>
+  <ul>
+    <li>WebSocket notifications</li>
+    <li>Facility capacity chart</li>
+    <li>CSV export for Hub</li>
+    <li>2FA reset portal</li>
+    <li>Audit viewer UI</li>
+  </ul>
+</details>
+
+<footer>
+&copy; 2025 The Moment,Inc – Developer Guide v0.1 MVP  
+</footer>
+
+</body>
+</html>
