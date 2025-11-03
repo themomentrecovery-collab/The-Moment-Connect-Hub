@@ -1,0 +1,181 @@
+# Create CSV templates and a starter ZIP for Caspio import
+
+import csv, zipfile, io, textwrap, datetime, os, json
+from pathlib import Path
+
+base = Path("/mnt/data/MomentConnect_Caspio_Starter")
+base.mkdir(parents=True, exist_ok=True)
+
+# Define CSV schemas and example rows
+tables = {
+    "organizations.csv": {
+        "headers": ["org_id","org_type","name","county","address","npi","dhcs_id"],
+        "rows": [
+            ["ORG-HUB-001","hub","The Moment Connect Hub","Orange","2108 N St #6101, Sacramento, CA 95816","",""],
+            ["ORG-AGY-001","agency","OC Probation – West","Orange","123 Civic Center Dr, Santa Ana, CA 92701","",""],
+            ["ORG-FAC-001","facility","Harbor Recovery – Costa Mesa","Orange","100 Harbor Way, Costa Mesa, CA 92626","1234567890","42-000123"]
+        ]
+    },
+    "users.csv": {
+        "headers": ["user_id","email","password","role","first_name","last_name","phone","org_id","mfa_secret","is_active"],
+        "rows": [
+            ["USR-HUB-001","hubadmin@themomentinc.org","SetInCaspio","hub","Raquel","Drozdova","+1-555-0100","ORG-HUB-001","",True],
+            ["USR-AGY-001","officer.garcia@ocprobation.gov","SetInCaspio","agency","Ruben","Garcia","+1-555-0111","ORG-AGY-001","",True],
+            ["USR-FAC-001","admissions@harborrecovery.com","SetInCaspio","facility","Dana","Kim","+1-555-0122","ORG-FAC-001","",True]
+        ]
+    },
+    "facilities.csv": {
+        "headers": ["facility_id","org_id","name","asam_levels","genders","ages","medi_cal","private_insurance","detox","residential"],
+        "rows": [
+            ["FAC-001","ORG-FAC-001","Harbor Recovery – Costa Mesa","['ASAM_3.1','ASAM_3.2']","['male','female','coed']","['18_64']",True,True,True,True]
+        ]
+    },
+    "bed_inventory.csv": {
+        "headers": ["bed_id","facility_id","level","total","available","last_updated"],
+        "rows": [
+            ["BED-001","FAC-001","detox",6,3,"2025-10-27T09:00:00Z"],
+            ["BED-002","FAC-001","residential",10,7,"2025-10-27T09:00:00Z"]
+        ]
+    },
+    "referrals.csv": {
+        "headers": ["referral_id","agency_org_id","referred_by_user_id","client_code","dob","county","asam_needed","gender","age_band","legal_basis","needs_medi_cal","notes","status","created_at","offered_to_facility_id","start_date"],
+        "rows": [
+            ["REF-0001","ORG-AGY-001","USR-AGY-001","C-0001","1990-05-12","Orange","ASAM_3.1","male","18_64","mandated",True,"Prop 36 order","pending","2025-10-27T08:30:00Z","",""]
+        ]
+    },
+    "referral_status_history.csv": {
+        "headers": ["status_id","referral_id","status","by_user_id","at","note"],
+        "rows": [
+            ["RSH-0001","REF-0001","pending","USR-AGY-001","2025-10-27T08:30:10Z","Submitted by agency"]
+        ]
+    },
+    "consents.csv": {
+        "headers": ["consent_id","referral_id","consent_type","signed_at","signer_name","signer_role","file_url","recipient_org_id"],
+        "rows": [
+            ["CON-0001","REF-0001","Part2","","","","",""],  # placeholder until signed
+            ["CON-0002","REF-0001","HIPAA","","","","",""]
+        ]
+    },
+    "attachments.csv": {
+        "headers": ["attachment_id","referral_id","kind","file_url","uploaded_by_user_id","uploaded_at"],
+        "rows": [
+            ["ATT-0001","REF-0001","CourtOrder","/files/ref-0001-courtorder.pdf","USR-AGY-001","2025-10-27T08:31:00Z"]
+        ]
+    },
+    "messages.csv": {
+        "headers": ["message_id","referral_id","from_user_id","to_org_id","body","created_at"],
+        "rows": [
+            ["MSG-0001","REF-0001","USR-AGY-001","ORG-HUB-001","Client has stable housing; seeking detox then residential.","2025-10-27T08:33:00Z"]
+        ]
+    },
+    "alerts.csv": {
+        "headers": ["alert_id","org_id","type","payload_json","is_read","created_at"],
+        "rows": [
+            ["ALT-0001","ORG-HUB-001","new_referral",json.dumps({"referral_id":"REF-0001"}),False,"2025-10-27T08:30:15Z"]
+        ]
+    },
+    "audit_log.csv": {
+        "headers": ["audit_id","user_id","action","object_type","object_id","before_json","after_json","at"],
+        "rows": [
+            ["AUD-0001","USR-AGY-001","insert","referrals","REF-0001","","{\"status\":\"pending\"}","2025-10-27T08:30:10Z"]
+        ]
+    }
+}
+
+# Write CSVs
+for filename, spec in tables.items():
+    with open(base/filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(spec["headers"])
+        for row in spec["rows"]:
+            writer.writerow(row)
+
+# Create a quick README with import/order and DataPage blueprints
+readme = f"""
+Moment Connect — Caspio Starter (v1)
+Generated: {datetime.date.today().isoformat()}
+
+WHAT'S INSIDE
+- CSV templates for core tables: organizations, users, facilities, bed_inventory, referrals, referral_status_history, consents, attachments, messages, alerts, audit_log.
+- Sample rows to prove relationships.
+- Field names are import-friendly. Set your own data types during import (see tips below).
+
+IMPORT ORDER (Caspio → Data → Import)
+1) organizations.csv
+2) users.csv
+3) facilities.csv
+4) bed_inventory.csv
+5) referrals.csv
+6) referral_status_history.csv
+7) consents.csv
+8) attachments.csv
+9) messages.csv
+10) alerts.csv
+11) audit_log.csv
+
+RECOMMENDED DATA TYPES
+- *_id fields: Text (unique, Primary Key where noted)
+- role/org_type/legal_basis/status: Text (or List with fixed values)
+- dates/timestamps: Date/Time
+- booleans: Yes/No
+- JSON fields: Text (Long)
+
+MINIMUM RELATIONSHIPS (establish in Caspio after import)
+- users.org_id → organizations.org_id
+- facilities.org_id → organizations.org_id
+- bed_inventory.facility_id → facilities.facility_id
+- referrals.agency_org_id → organizations.org_id
+- referrals.referred_by_user_id → users.user_id
+- referrals.offered_to_facility_id → organizations.org_id (facility org)
+- referral_status_history.referral_id → referrals.referral_id
+- consents.referral_id → referrals.referral_id
+- consents.recipient_org_id → organizations.org_id
+- attachments.referral_id → referrals.referral_id
+- messages.referral_id → referrals.referral_id
+- alerts.org_id → organizations.org_id
+- audit_log.user_id → users.user_id
+
+NEXT: DATAPAGES (first three)
+A) Agency → New Referral (Submission Form)
+   - Table: referrals
+   - Fields shown: client_code, dob (optional), county, asam_needed, gender, age_band, legal_basis, needs_medi_cal, notes
+   - Set Hidden: agency_org_id = [@authfield:org_id], referred_by_user_id = [@authfield:user_id], status = 'pending', created_at = [@timestamp]
+   - On Submit: Redirect to Upload Attachments and pass [@InsertRecordReferral_ID]
+
+B) Hub → Incoming Queue (Report + Details)
+   - DataSource: referrals (Filter: status IN ('pending','offered'))
+   - Search fields: county, legal_basis, asam_needed
+   - Results: referral_id, client_code, county, asam_needed, created_at
+   - Details page:
+       * Section 1: Summary fields + inline child Report (attachments by referral_id)
+       * Section 2: "Match Panel" = View/Report of facilities filtered by parameters (see blueprint doc)
+       * Buttons (Custom HTML blocks with Update actions):
+           - Offer Placement → sets offered_to_facility_id and status='offered'
+           - Return for Info → leaves 'pending' and sends message to agency
+       * Triggered Action: on status change → insert referral_status_history + alert to facility
+
+C) Facility → Offers (Report + Details)
+   - DataSource: referrals (Filter: status='offered' AND offered_to_facility_id=[@authfield:org_id])
+   - Results: referral_id, client_code, county, asam_needed, created_at
+   - Details page:
+       * Show attachments list
+       * Buttons:
+           - Accept → status='accepted'
+           - Deny (dropdown reason) → status='denied'
+       * Triggered Action (on accepted): decrement bed_inventory.available for level matching asam_needed
+
+SECURITY NOTES
+- Until consents include a signed Part 2 grant to recipient, hide PII and use client_code only.
+- Build role-scoped Auth for agency/hub/facility/admin, then base every DataPage on Views that enforce row ownership.
+"""
+
+(base/"README.txt").write_text(textwrap.dedent(readme), encoding="utf-8")
+
+# Zip it all
+zip_path = Path("/mnt/data/MomentConnect_Caspio_Starter_2025-10-27.zip")
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+    for p in base.glob("*.csv"):
+        z.write(p, p.name)
+    z.write(base/"README.txt", "README.txt")
+
+zip_path, list(sorted([p.name for p in base.glob('*')]))
